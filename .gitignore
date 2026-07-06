@@ -1,0 +1,10 @@
+
+# Local UrQMD code and generated outputs
+UrQMD_C_Code/
+*.root
+r_urqmd/
+tables.dat
+_build/
+
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
