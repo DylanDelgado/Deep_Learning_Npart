@@ -1,0 +1,43 @@
+#!/bin/bash
+
+curdir=`pwd`
+qnum=200
+while ((1)); do
+	if [ -e killme ]; then
+		echo EXIT
+		break;
+	fi
+    HELD=`condor_q $USER | grep ' H ' | awk '{print $1}'`
+    if [ -n "$HELD" ]; then
+        condor_rm $HELD
+    fi
+	running=`condor_q $USER|grep urqmd|wc -l`
+	((subnum=qnum-running))
+	if [ $subnum -gt 0 ]; then
+		subed=0
+		for i in Data/*_*_run; do
+			if [ $subed -ge $subnum ]; then
+				break
+			fi
+			if ! [ -e $i/job.log ]; then
+				if [ -e $i/qid ]; then
+					continue
+				fi
+				cd ${i}
+                rm -f tmpl.pid qid
+                rm -f job.log
+                rm -f *.root
+                for j in *.con; do
+                    qstr=`condor_submit $j`
+                    astr=(${qstr})
+                    qid=${astr[7]}
+                    echo $i with id $qid has been submitted
+                    echo ${qid}0 > qid
+                done
+				((subed=subed+1))
+				cd ${curdir}
+			fi
+		done
+	fi
+	sleep 600
+done

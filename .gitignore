@@ -1,10 +1,59 @@
-
-# Local UrQMD code and generated outputs
-UrQMD_C_Code/
-*.root
-r_urqmd/
-tables.dat
-_build/
-
+cat > .gitignore <<'EOF'
+# ----------------------------
+# Python / Jupyter
+# ----------------------------
+__pycache__/
+*.pyc
 .ipynb_checkpoints/
-notebooks/.ipynb_checkpoints/
+
+# ----------------------------
+# Editor / local machine files
+# ----------------------------
+.vscode/
+.DS_Store
+
+# ----------------------------
+# Generated physics / ML data
+# ----------------------------
+*.root
+*.h5
+*.npz
+*.pt
+*.pth
+
+# ----------------------------
+# Build artifacts
+# ----------------------------
+_build/
+obj_*/
+*.o
+*.a
+*.mod
+*.so
+*.dylib
+*.exe
+
+# ----------------------------
+# UrQMD runtime/generated outputs
+# ----------------------------
+r_urqmd/
+log
+*.log
+*.pid
+fort.*
+rdlist
+tables.dat
+
+# Native UrQMD output files
+*.f13
+*.f14
+*.f15
+*.f16
+*.f19
+*.f20
+
+# Generated UrQMD executables
+UrQMD_C_Code/urqmd-4.0/maketables
+UrQMD_C_Code/r_urqmd/urqmd
+UrQMD_C_Code/_build/
+EOF

@@ -1,0 +1,603 @@
+#!/bin/bash
+
+function chkerr() {
+echo
+}
+
+if [[ $1 = "del" ]]; then
+    delerr=0
+    for ins in "${@:2}"; do
+        if [[ $ins == -* ]]; then
+            opt=($opt "$ins")
+        elif [[ $ins == "error" ]]; then
+            delerr=1
+            dlist=()
+            if [ -e error ]; then
+                for run in `cat error`; do
+                    dlist=(${dlist[@]} `cat $run/qid`)
+                done
+            else
+                echo 'No error file found'
+                exit 1
+            fi
+        else
+            jn="$ins"
+        fi
+    done
+    if [ $delerr -eq 1 ]; then
+        condor_rm $opt ${dlist[@]}
+        exit 0
+    fi
+    if [[ -z "$jn" ]]; then
+        jn=`make -s runname` #using -s option to avoid output like Entering directory from make
+    fi
+    IFS=$'\n'
+    dlist=()
+    for next in `condor_q $USER`; do
+        sid=$(echo $next | awk -v jn="$jn" '$1 ~ /^[0-9].*/ && $9 ~ jn {print $1}')
+        #ssn=`echo $next | awk '{print $3}'`
+        #if [[ $ssn =~ "$jn" ]]; then
+        if [[ -n "$sid" ]]; then
+            dlist=(${dlist[@]} $sid)
+        fi
+    done
+    if [ ${#dlist[@]} -ne 0 ]; then
+        condor_rm $opt ${dlist[@]}
+    fi
+    exit 0
+fi
+
+if [[ $1 = "tmpl" ]]; then
+    jn=""
+    if [ -e Makefile ]; then
+        jn=`make -s runname` #using -s option to avoid output like Entering directory from make
+    fi
+    jobname="$jn"
+    jobscript="./$jn"
+    jobtype="cas"
+    scriptname="run.sh"
+    if [[ -n "$2" ]]; then
+        jobname="$2"
+    fi
+    if [[ -n "$3" ]]; then
+        jobscript="$3"
+    fi
+    if [[ -n "$4" ]]; then
+        scriptname="$4"
+    fi
+    if [[ -n "$5" ]]; then
+        jobtype="$5"
+    fi
+    if [[ -z "$jobname" ]]; then
+        echo 'Please name the job'
+        exit 1
+    fi
+    printf -v shstr "#!/bin/bash\nrm -f tmpl.pid\necho R > tmpl.pid\n${jobscript} > run.log 2>&1\nrm -f tmpl.pid\necho \$status > tmpl.pid\n"
+    printf "${shstr}" > "$scriptname"
+    chmod +x "$scriptname"
+    printf -v substr 'Universe       = vanilla\nNotification   = never\nPriority       = +10\nGetEnv         = true\nExecutable     = '$scriptname'\nLog            = job.log\nOutput         = job.out\nError          = job.err\nQueue'
+    printf "${substr}" > "subq.con"
+    exit 0
+fi
+
+
+if [[ $1 = "watch" ]]; then
+    show=1
+    skiplog=1
+    startErr=1
+    reportRun=1
+    checkNoRoot=1
+    checktmpl=1
+    checkqueue=1
+    for ins in "${@:2}"; do
+        if [[ $ins = "-d" ]]; then # don't record in file
+            skiplog=0
+        fi
+        if [[ $ins = "-m" ]]; then # show detail
+            show=0
+        fi
+        if [[ $ins = "-w" ]]; then # Write running job to a running.error
+            reportRun=0
+        fi
+        if [[ $ins = "-n" ]]; then # Check if root file generatered
+            checkNoRoot=0
+        fi
+        if [[ $ins = "-0" ]]; then # Faild to start is error
+            startErr=0
+        fi
+        if [[ $ins = "-res" ]]; then # check if tmpl.pid is true
+            checktmpl=0
+        fi
+        if [[ $ins = "-qid" ]]; then # check if qid is queueing
+            checkqueue=0
+        fi
+    done
+    if [[ $2 = "lroot" ]]; then # see last root
+        for i in Data/*_run; do
+            if [[ $3 == "-R" ]]; then
+                if ! [ -e $i/tmpl.pid ]; then
+                    continue
+                fi
+                runstat=`cat $i/tmpl.pid`
+                if [[ "$runstat" != "R" ]]; then
+                    continue
+                fi
+            fi
+            lr=(`/bin/ls $i/*.root -t 2>/dev/null`)
+            if [[ -z "${lr[@]}" ]]; then
+                continue
+            fi
+            nr=`/bin/ls $i/*.root 2>/dev/null| wc -l`
+            echo $i : last created at `date -r ${lr[0]}` in $nr files
+        done
+        exit 0
+    fi
+    if [[ $2 = "count" ]]; then # count
+        rtot=0
+        for i in Data/*_run; do
+            nr=`/bin/ls $i/*.root 2>/dev/null| wc -l`
+            echo $i := $nr
+            ((rtot=rtot+nr))
+        done
+        echo Total $rtot
+        exit 0
+    fi
+    if [[ $2 = "rootchk" ]]; then
+        echo start root file checking, please wait a long time...
+        marco=/DATA/data01/u/star/heshu/.devtools/iter.C
+        cmd="root.exe -q -l"
+        bin="${HOME}/.devtools/iter"
+        curdir=`pwd`
+        rec_this=0
+        if [ -e error ]; then
+            ename=error.`date '+%s'`
+            mv error $ename
+            gzip $ename
+        fi
+        for i in Data/*_run; do
+            rec_this=0
+            roots=($(find ${i} -name '*.root'))
+            if [ -z $roots ]; then
+                echo No file in $i
+                echo $i >> error
+                continue
+            fi
+            for j in ${roots[@]}; do
+                msg=$( $bin ${curdir}/${j} 2>&1)
+                #msg=$( ${cmd} ${marco}'("'${curdir}/${j}'")' )
+                #echo $msg | grep ErrorOfEmpty
+                #if [ $? -eq 0 ]; then
+                #if [[ $msg = "ErrorOfEmpty" ]]; then
+                if [[ -n "$msg" ]]; then
+                    echo Empty root file error in $i $j
+                    rec_this=1
+                fi
+            done
+            if [ $rec_this -eq 1 ]; then
+                echo $i >> error
+            fi
+        done
+        echo Finish checking
+        exit 0
+    fi
+    count=0
+    ecount=0
+    error_job=()
+    running_job=()
+    condor_q $USER | grep $USER | sort -o qlist.tmp
+    for i in Data/*_run; do
+        if ! [ -e $i/job.log ]; then
+            if [ $show -eq 0 ]; then
+                echo $i
+            fi
+            ((count=count+1))
+            if [ -e $i/qid ]; then
+                echo try to find if $i running...
+                condor_q $USER | grep $USER | grep `cat $i/qid`
+                grep_rt=$?
+                if [ $checkqueue -eq 0 ]; then
+                    if [ $grep_rt -ne 0 ]; then
+                        echo $i is not in queue
+                        ((ecount=ecount+1))
+                        error_job=(${error_job[@]} $i)
+                        continue
+                    fi
+                fi
+            fi
+            if [ $startErr -eq 0 ]; then
+                echo $i has not started
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+            fi
+            continue
+        fi
+        tail -n 1000 $i/job.log | egrep -i 'Error|fault'
+        if [ $? -eq 0 ]; then
+            echo $i Have unknown error
+            ((ecount=ecount+1))
+            error_job=(${error_job[@]} $i)
+            continue
+        fi
+        if [ -e $i/job.err ]; then
+            tail -n 100 $i/job.err | egrep -i 'error|fault'
+            if [ $? -eq 0 ]; then
+                echo $i Have unknown error
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+                continue
+            fi
+        fi
+        if [ -e $i/qid ]; then
+            qid=`cat $i/qid`
+        fi
+        if [ -e $i/tmpl.pid ]; then
+            ret=$(cat ${i}/tmpl.pid)
+            if [[ $ret == "R" ]]; then
+                if [[ -n $qid ]]; then
+                    egrep $qid qlist.tmp 1>/dev/null
+                    if [ $? -eq 0 ]; then
+                        echo $i still running
+                        running_job=(${running_job[@]} $i)
+                        if [[ $reportRun -eq 0 ]]; then
+                            echo $i >> running.error
+                        fi
+                    else
+                        echo $i has been interrupted
+                        ((ecount=ecount+1))
+                        error_job=(${error_job[@]} $i)
+                    fi
+                    continue
+                else
+                    ((ecount=ecount+1))
+                    echo $i still running or interrupted
+                    error_job=(${error_job[@]} $i)
+                    continue
+                fi
+            fi;
+            if [[ -z $ret ]]; then
+                echo $i exited or interrupted with code $ret
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+                continue
+            fi
+            if [ $ret -ne 0 ]; then
+                echo $i exited with code $ret
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+                continue
+            fi
+        else
+            if [ $checktmpl -eq 0 ]; then
+                echo $i has no tmpl.pid
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+                continue
+            fi
+        fi
+        if [ $checkNoRoot -eq 0 ]; then
+            if ! [ -e $i/*.root ]; then
+                echo $i exited without root file
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+                continue
+            fi
+        fi
+        if [ $show -eq 0 ]; then
+            echo $i Finished
+        fi
+    done
+    rm -f qlist.tmp
+    rcount=${#running_job[@]}
+    if [ -e error ]; then
+        ename=error.`date '+%s'`
+        mv error $ename
+        gzip $ename
+    fi
+    if [ $count -eq 0 -a $ecount -eq 0 -a $rcount -eq 0 ]; then
+        echo All jobs finished.
+        echo If you need more carefully inspection, run \'submit watch rootchk\'
+        exit 0
+    fi
+    if [ $count -ne 0 ]; then
+        echo $count jobs failed to start now. Please verify it by Type \"qstat\"
+        echo or Type "./submit retry -a" to try to resubmit them.
+    fi
+    if [ $ecount -ne 0 ]; then
+        echo $ecount jobs failed to finish by now. Thay are
+        if [ $skiplog -eq 0 ]; then
+            exit 0
+        fi;
+        for i in ${error_job[@]}; do
+            echo $i
+            echo $i >> error
+        done
+    fi
+    exit 0
+fi
+
+if [[ $1 = "retry" ]]; then
+    if [ -e Makefile ]; then
+        jn=`make -s runname`
+    fi
+    if [[ $2 = "-e" ]]; then
+        if ! [ -e error ]; then
+            echo No errors found or submit watch didn\'t run first.
+            echo Or run submit retry -e
+            exit 1
+        fi
+        curdir=`pwd`
+        for i in `cat error`; do
+            jobdir=${curdir}/${i}
+            rm -f ${jobdir}/tmpl.pid
+            rm -f ${jobdir}/qid
+            rm -f ${jobdir}/job.log
+            rm -f ${jobdir}/*.root
+            cd $jobdir
+            for j in *.con; do
+                qstr=`condor_submit $j`
+                astr=(${qstr})
+                qid=${astr[7]}
+                echo $i/$j with id $qid has been submitted
+                echo $qid > qid
+            done
+            cd $curdir
+        done
+        mv error error.`date '+%s'`
+        exit 0
+    fi
+    if [[ $2 = "-a" ]]; then
+        show=1
+        skiplog=1
+        reportRun=1
+        for ins in "${@:3}"; do
+            if [[ $ins = "-d" ]]; then
+                skiplog=0
+            fi
+            if [[ $ins = "-m" ]]; then
+                show=0
+            fi
+            if [[ $ins = "-q" ]]; then
+                reportRun=0
+            fi
+        done
+        count=0
+        ecount=0
+        dead_job=()
+        for i in Data/*_run; do
+            if ! [ -e $i/job.log ]; then
+                ((count=count+1))
+                echo $i falied to start, retring...
+                dead_job=(${dead_job[@]} $i)
+                continue
+            fi
+            if [ -e $i/tmpl.pid ]; then
+                ret=$(cat ${i}/tmpl.pid)
+                if [[ -z $ret ]]; then
+                    echo $i exited or interrupted with code $ret
+                    ((ecount=ecount+1))
+                    error_job=(${error_job[@]} $i)
+                    continue
+                fi
+                if [ $ret -ne 0 ]; then
+                    echo $i exited or interrupted with code $ret
+                    ((ecount=ecount+1))
+                    error_job=(${error_job[@]} $i)
+                    continue
+                fi;
+            fi;
+            tail -n 5000 $i/job.log | egrep -i 'Error|fault'
+            if [ $? -eq 0 ]; then
+                echo $i has unknown error, retring...
+                ((ecount=ecount+1))
+                error_job=(${error_job[@]} $i)
+            fi
+        done
+        job_to_retry=$(echo ${error_job[@]} ${dead_job[@]} |tr ' ' '\n' |sort |uniq )
+        curdir=`pwd`
+        for i in `cat error`; do
+            jobdir=${curdir}/${i}
+            rm -f ${jobdir}/tmpl.pid
+            rm -f ${jobdir}/qid
+            rm -f ${jobdir}/job.log
+            rm -f ${jobdir}/*.root
+            cd $jobdir
+            for j in *.sh; do
+                qstr=`condor_submit $j`
+                astr=(${qstr})
+                qid=${astr[7]}
+                echo Job $qid has been submitted
+                echo ${qid}.0 > qid
+            done
+            cd $curdir
+        done
+        mv error error.`date '+%s'`
+        #exit 0
+    fi
+
+    IFS=$'\n'
+    for next in `qstat`; do
+        sid=`echo $next | awk '{print $1}'`
+        sst=`echo $next | awk '{print $5}'`
+        if [[ $sst = "Eqw" ]]; then
+            qmod -cj $sid
+        fi
+    done
+    exit 0
+fi
+
+if [[ $1 = "confirm" ]]; then
+    cd Data
+    for i in *_run; do
+        cd ${i};
+        rm -f tmpl.pid qid
+        rm -f job.log
+        rm -f *.root
+        for j in *.con; do
+            qstr=`condor_submit $j`
+            astr=(${qstr})
+            qid=${astr[7]}
+            echo $i with id $qid has been submitted
+            echo ${qid}0 > qid
+        done
+        #sleep 1;
+        cd ../;
+    done
+    cd ..
+    exit 0
+fi
+
+if [[ $1 = "reset" ]]; then
+    cd Data
+    for i in *_run; do
+        cd ${i};
+        rm -f tmpl.pid qid queue
+        rm -f job.log
+        find . -name '*.root' -print | xargs rm -f
+        for j in *.sh; do
+            echo $i has been reset
+        done
+        #sleep 1;
+        cd ../;
+    done
+    cd ..
+    exit 0
+fi
+
+if [[ $1 = "emit" ]]; then
+    jn=`make -s runname` #using -s option to avoid output like Entering directory from make
+    Abort=0
+    if [[ $2 = "-r" ]]; then
+        sed -i "$ d" finished
+        exit 0
+    fi
+    if [[ $2 = "-a" ]]; then
+        Abort=1
+    fi
+    if ! [ -e finished ]; then
+        touch finished
+    fi
+    cdir=`pwd`
+    for i in Data/*_run; do
+        grep -q "$i" finished
+        if [[ $? -eq 0 ]]; then
+            continue
+        fi
+        cd $i && ./${jn}
+        cd $cdir
+        echo Runed $ret
+        #if [ -e "${jn}.root"]; then
+        #echo $i >> finished
+        #fi
+        echo $i >> finished
+        if [ $Abort -eq 0 ]; then
+            break
+        fi
+    done
+    exit 0
+fi
+
+if [[ $1 = "id" ]]; then
+    if [[ -n $2 ]]; then
+        quid=$2
+        find ./Data -name 'qid' | xargs -I {} grep -H "$quid" {}
+        exit 0
+    fi
+    for i in Data/*_*_run; do
+        if ! [ -e "$i/qid" ]; then
+            quid="-1"
+        else
+            quid=`cat $i/qid`
+        fi
+        if ! [ -e "$i/tmpl.pid" ]; then
+            runstat="N/A"
+        else
+            runstat=`cat $i/tmpl.pid`
+        fi
+        printf "%-30s -> %-8d:%4s\n" $i $quid $runstat
+    done
+    exit 0
+fi
+
+if [[ $1 = "commit" ]]; then
+    qstr=`condor_submit $2`
+    astr=(${qstr})
+    qid=${astr[7]}
+    echo Job $qid has been submitted
+    echo ${qid}.0 > qid
+    exit 0
+fi
+
+if [[ $1 = "clean" ]]; then
+    rm -f finished error error.* run.sh job.log job.err job.out subq.con tmpl.pid qid
+    exit 0
+fi
+
+printf -v helpstr "Usage:
+submit confirm
+    Submit all jobs. Only after \'make clone\' or \'make grid\'
+
+submit watch [-m(ore) | count(roots file)) |
+    rootchk(root file checking) |
+    lroot(last root data) [-R(unning) only] |
+    -d(on't record to file) | -w(rite running jobs to running.error)
+    -n(ozero root file check) |
+    -res(must check tmpl) |
+    -0(Record jobs faild to start to error file) ]
+
+    Monitor the final status of jobs.
+    Please use \'qstat\' for more detail control.
+        Tips: Option \'rootchk\'   is helpful to detacting implicit errors.
+    But using only after all jobs finished
+
+    submit id [job-ID]
+    Return a list of paths and job-ID relates to it if job-ID
+    is not specified.
+    Return the path relates to the job-ID given in command
+
+    Example:
+        submit id      # return a list
+        submit id 1234 # return the path with job-ID=1234
+
+
+submit del [jobname] [other option for qdel]
+    Cancel last submit
+    Example:
+        submit del
+        #only in job's path, the jobs will be cancelled
+
+submit del task
+    #all jobs with name \'task\' will be deleted.
+
+submit del \"tas.*\" -f 
+    # Equavelent to \'qdel -f\' for
+    # all jobs that satisfies the pattern
+    # of \"tas.*\" (Using awk's RegEx)
+
+submit retry [-a(ll errors retry) | -e(rrors in error file only)]
+    Resubmit Eqw or other errors.
+    To restart everything, just \'submit del\' and make clean.
+        Tips: Please resubmit only when all jobs have finished.
+    To retry immediately, \'submit del\' first.
+    Example:
+        submit retry
+        # Eqw status will be clear
+
+        submit retry -a
+        # same to submit watch && submit retry -e
+
+        submit watch
+        submit retry -e
+        # if watch find error, -e will retry them
+
+submit tmpl [job name] [\"job operation\"]
+[script name(instead of run.sh)]
+    Make the qsub run.sh from template
+
+submit emit [-a(ll emit) | -r(emove last)]
+    Submit jobs locally and serially
+
+submit clean
+    Clean relevant files
+"
+
+printf "$helpstr" | less

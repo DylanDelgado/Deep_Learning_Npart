@@ -1,0 +1,69 @@
+Run on a Linux/Jupyter environment
+==================================
+
+Install the build dependencies first. In a conda/mamba environment this is
+usually enough:
+
+    mamba install -c conda-forge root make gxx_linux-64 gfortran_linux-64 python
+
+Check that the tools are visible:
+
+    root-config --version
+    g++ --version
+    gfortran --version
+    make --version
+
+Build the UrQMD ROOT wrapper:
+
+    make
+
+If the build fails because old object files or libraries are incompatible with
+the Jupyter container, force a fresh Linux rebuild:
+
+    make rebuild-local
+
+Run one local test job:
+
+    make local-run
+
+This creates/uses r_urqmd and writes an Event_*.root file there.
+
+Run many local jobs without Condor:
+
+    # NUM is the number of independent jobs, JOBS is parallelism.
+    make local-parallel NUM=16 JOBS=16
+
+After local jobs finish, gather ROOT files into ./roots:
+
+    bash pull_data.sh
+
+For a quick smoke test, reduce the event count in urqmd.cc before building.
+Look for:
+
+    const int event_num = (int) 500;
+
+For example, change 500 to 10, then run make local-run.
+
+
+Old RCF/Condor workflow
+=======================
+
+run this code at rcf:
+
+1. make
+
+# variable "NUM" at line 2 of conf.mk 
+# is number of jobs decided to generate.
+# Change this number before run "make clone"
+2. make clone
+
+# submit jobs
+# The script queue_daemon is run in background.
+# It automactically submit jobs.
+# The maximum jobs run at same time can be tuned by qnum at line 4 of queue_daemon
+3. nohup ./queue_daemon > log &
+
+#when all jobs are done or one think it is time to kill jobs that are still running.
+#use `ps` to check the progress id of queue_daemon then `kill the_id`
+#try `condor_rm user_name` if want to kill jobs still running
+#pull out urqmd root file from job folders by `bash pull_data.sh`
