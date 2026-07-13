@@ -1,0 +1,13 @@
+name: urqmd
+channels:
+  - conda-forge
+dependencies:
+  - make
+  - gxx_linux-64
+  - root
+  - python
+  - gfortran_linux-64
+  - matplotlib
+  - vim
+  - h5py
+prefix: /workspace/miniforge3/envs/urqmd
