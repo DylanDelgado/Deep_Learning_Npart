@@ -10,4 +10,6 @@ dependencies:
   - matplotlib
   - vim
   - h5py
+  - pytorch
+  - uproot
 prefix: /workspace/miniforge3/envs/urqmd
