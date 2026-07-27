@@ -1,15 +1,19 @@
 name: urqmd
 channels:
   - conda-forge
+  - nodefaults
 dependencies:
   - make
-  - gxx_linux-64
+  - c-compiler
+  - cxx-compiler
+  - fortran-compiler
   - root
-  - python
-  - gfortran_linux-64
+  - python=3.11
+  - jupyterlab
+  - ipykernel
   - matplotlib
+  - scipy
   - vim
   - h5py
   - pytorch
   - uproot
-prefix: /workspace/miniforge3/envs/urqmd
