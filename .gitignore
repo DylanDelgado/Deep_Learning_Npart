@@ -6,6 +6,8 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
+/Glauber/glauber_output/
+
 # ----------------------------
 # Editor / local machine files
 # ----------------------------
