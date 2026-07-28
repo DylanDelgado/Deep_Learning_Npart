@@ -9,6 +9,7 @@ dependencies:
   - fortran-compiler
   - root
   - python=3.11
+  - numpy
   - jupyterlab
   - ipykernel
   - matplotlib
@@ -17,3 +18,4 @@ dependencies:
   - h5py
   - pytorch
   - uproot
+  - awkward
