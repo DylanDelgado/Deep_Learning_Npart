@@ -8,5 +8,4 @@ The goal is to use particle-level event information from UrQMD to estimate $\(N_
 
 The [`glauber`](glauber) directory provides a configurable Python Monte Carlo
 Glauber model that writes event-level `Npart`, `Ncoll`, multiplicity, impact
-parameter, spectators, and participant geometry to CSV. See its
-[`README`](glauber/README.md) for assumptions and usage.
+parameter, and participant geometry to numpy NPZ file.
