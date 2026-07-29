@@ -3,7 +3,7 @@ import numpy as np
 import pathlib as path
 import sys
 
-n_events = 18750
+n_events = int(sys.argv[2]) if len(sys.argv) > 2 else 20_000
 cross_section_mb = 28.0
 b_max = 15.0
 worker_id = int(sys.argv[1])
