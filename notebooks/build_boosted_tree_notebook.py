@@ -476,6 +476,173 @@ plt.show()"""
 )
 cells.append(
     nbf.v4.new_markdown_cell(
+        """## CBM-style centrality and impact-parameter precision
+
+Following Kuttan *et al.*, centrality is assigned in 5% classes using the
+RefMult3 ordering of the held-out minimum-bias events. The signed prediction
+error is defined as $b_{\\mathrm{true}}-b_{\\mathrm{pred}}$. Relative precision
+is $\\sigma_{\\mathrm{err}}/b_{\\mathrm{true}}$, evaluated in true-$b$ bins."""
+    )
+)
+cells.append(
+    nbf.v4.new_code_cell(
+        """# RefMult3 centrality: largest multiplicity is the most central event.
+centrality_edges = np.arange(0.0, 100.0 + 5.0, 5.0)
+centrality_centers = 0.5 * (centrality_edges[:-1] + centrality_edges[1:])
+refmult_order = np.argsort(-test_refmult3, kind="stable")
+event_centrality = np.empty(len(test_refmult3), dtype=float)
+event_centrality[refmult_order] = (
+    100.0 * (np.arange(len(test_refmult3)) + 0.5) / len(test_refmult3)
+)
+centrality_index = np.digitize(event_centrality, centrality_edges) - 1
+
+centrality_true_b = np.full(len(centrality_centers), np.nan)
+centrality_counts = np.zeros(len(centrality_centers), dtype=int)
+centrality_results = {}
+for label, prediction in (
+    ("Boosted tree", b_tree_pred),
+    ("RefMult3 + Glauber", b_refmult3_pred),
+):
+    mean_prediction = np.full(len(centrality_centers), np.nan)
+    mean_error = np.full(len(centrality_centers), np.nan)
+    error_sem = np.full(len(centrality_centers), np.nan)
+    error = test_b - prediction
+    for index in range(len(centrality_centers)):
+        selected = centrality_index == index
+        count = selected.sum()
+        centrality_counts[index] = count
+        if count:
+            centrality_true_b[index] = test_b[selected].mean()
+            mean_prediction[index] = prediction[selected].mean()
+            mean_error[index] = error[selected].mean()
+            error_sem[index] = error[selected].std(ddof=1) / np.sqrt(count)
+    centrality_results[label] = {
+        "mean_prediction": mean_prediction,
+        "mean_error": mean_error,
+        "error_sem": error_sem,
+    }
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+axes[0].plot(
+    centrality_centers,
+    centrality_true_b,
+    color="black",
+    marker="o",
+    label=r"True $b$",
+)
+for label, color in (("Boosted tree", "tab:blue"), ("RefMult3 + Glauber", "tab:orange")):
+    result = centrality_results[label]
+    axes[0].plot(
+        centrality_centers,
+        result["mean_prediction"],
+        color=color,
+        marker="o",
+        label=label,
+    )
+    axes[1].errorbar(
+        centrality_centers,
+        result["mean_error"],
+        yerr=result["error_sem"],
+        color=color,
+        marker="o",
+        capsize=2,
+        label=label,
+    )
+axes[0].set(
+    xlabel="RefMult3 centrality [%]",
+    ylabel=r"Mean impact parameter $b$ [fm]",
+    title=r"$b$ reconstruction by centrality class",
+)
+axes[1].axhline(0.0, color="black", linewidth=1)
+axes[1].set(
+    xlabel="RefMult3 centrality [%]",
+    ylabel=r"Mean error $b_{\\mathrm{true}}-b_{\\mathrm{pred}}$ [fm]",
+    title="CBM-style mean error vs centrality",
+)
+for ax in axes:
+    ax.set_xlim(0, 100)
+    ax.grid(alpha=0.25)
+    ax.legend()
+fig.tight_layout()
+fig.savefig(
+    RESULTS_DIR / "centrality_refmult_vs_boosted_tree.png",
+    dpi=180,
+    bbox_inches="tight",
+)
+plt.show()
+
+
+# CBM definition: relative precision = std(true - predicted) / b_true.
+b_precision_edges = np.arange(0.0, np.ceil(test_b.max()) + 1.0, 1.0)
+b_precision_centers = 0.5 * (b_precision_edges[:-1] + b_precision_edges[1:])
+b_precision_index = np.digitize(test_b, b_precision_edges) - 1
+b_precision_results = {}
+
+fig, ax = plt.subplots(figsize=(7.5, 5))
+for label, prediction, color in (
+    ("Boosted tree", b_tree_pred, "tab:blue"),
+    ("RefMult3 + Glauber", b_refmult3_pred, "tab:orange"),
+):
+    relative_precision = np.full(len(b_precision_centers), np.nan)
+    relative_precision_uncertainty = np.full(len(b_precision_centers), np.nan)
+    counts = np.zeros(len(b_precision_centers), dtype=int)
+    error = test_b - prediction
+    for index in range(len(b_precision_centers)):
+        selected = b_precision_index == index
+        counts[index] = selected.sum()
+        if counts[index] >= 20:
+            b_true_bin = test_b[selected].mean()
+            sigma_error = error[selected].std(ddof=1)
+            relative_precision[index] = sigma_error / b_true_bin
+            relative_precision_uncertainty[index] = (
+                relative_precision[index] / np.sqrt(2.0 * (counts[index] - 1))
+            )
+    valid = counts >= 20
+    ax.errorbar(
+        b_precision_centers[valid],
+        100.0 * relative_precision[valid],
+        yerr=100.0 * relative_precision_uncertainty[valid],
+        marker="o",
+        capsize=2,
+        color=color,
+        label=label,
+    )
+    b_precision_results[label] = {
+        "relative_precision": relative_precision,
+        "uncertainty": relative_precision_uncertainty,
+        "counts": counts,
+    }
+
+ax.set(
+    xlabel=r"True impact parameter $b_{\\mathrm{true}}$ [fm]",
+    ylabel=r"Relative precision $\\sigma_{\\mathrm{err}}/b_{\\mathrm{true}}$ [%]",
+    title="CBM-style impact-parameter precision",
+)
+ax.grid(alpha=0.25)
+ax.legend()
+fig.tight_layout()
+fig.savefig(
+    RESULTS_DIR / "relative_b_precision_cbm.png",
+    dpi=180,
+    bbox_inches="tight",
+)
+plt.show()
+
+for label, result in b_precision_results.items():
+    paper_range = (
+        (b_precision_centers >= 5.0)
+        & (b_precision_centers <= 14.0)
+        & np.isfinite(result["relative_precision"])
+    )
+    values = 100.0 * result["relative_precision"][paper_range]
+    print(
+        f"{label} relative precision for 5 <= b <= 14 fm: "
+        f"{values.min():.2f}% to {values.max():.2f}%"
+    )"""
+    )
+)
+cells.append(
+    nbf.v4.new_markdown_cell(
         """## Observable feature importance and saved results
 
 Permutation importance is evaluated on a reproducible validation subset. The
@@ -540,6 +707,15 @@ np.savez_compressed(
     nbd_ks_distance=fit_statistics.ks_distance,
     nbd_poisson_deviance_per_ndf=fit_statistics.poisson_deviance_per_ndf,
     nbd_pearson_chi2_per_ndf=fit_statistics.pearson_chi2_per_ndf,
+    centrality_centers=centrality_centers,
+    centrality_mean_true_b=centrality_true_b,
+    centrality_boosted_tree_mean_b=centrality_results["Boosted tree"]["mean_prediction"],
+    centrality_refmult3_glauber_mean_b=centrality_results["RefMult3 + Glauber"]["mean_prediction"],
+    centrality_boosted_tree_mean_error=centrality_results["Boosted tree"]["mean_error"],
+    centrality_refmult3_glauber_mean_error=centrality_results["RefMult3 + Glauber"]["mean_error"],
+    b_precision_centers=b_precision_centers,
+    b_precision_boosted_tree=b_precision_results["Boosted tree"]["relative_precision"],
+    b_precision_refmult3_glauber=b_precision_results["RefMult3 + Glauber"]["relative_precision"],
 )
 
 print("Saved results to", RESULTS_DIR)
