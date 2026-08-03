@@ -3,9 +3,9 @@ import numpy as np
 import pathlib as path
 import sys
 
-n_events = int(sys.argv[2]) if len(sys.argv) > 2 else 20_000
-cross_section_mb = 28.0
-b_max = 15.0
+n_events = 2000
+cross_section_mb = 42.0
+b_max = 18.0
 worker_id = int(sys.argv[1])
 
 np.random.seed(1000 + worker_id)
