@@ -23,7 +23,8 @@ cells.append(
 This notebook predicts generator labels $N_{\mathrm{part}}$ and impact parameter
 $b$ from measurable final-state particle summaries. Neither target, event ID,
 the ROOT `mul` branch, nor any Glauber geometry quantity is included in the
-feature matrix.
+feature matrix. Protons and antiprotons are removed before every particle-level
+count or kinematic summary is constructed.
 
 The RefMult3 baseline is calibrated with a two-component Glauber+negative-
 binomial model. RefMult3 is defined here as charged final-state particles with
@@ -56,7 +57,7 @@ if PROJECT_ROOT is None:
     raise FileNotFoundError("Could not locate the Deep_Learning_Npart project root.")
 
 DATA_ROOT = PROJECT_ROOT / "UrQMD_C_Code/Data"
-CACHE_FILE = PROJECT_ROOT / "Data/processed/urqmd_observable_features.npz"
+CACHE_FILE = PROJECT_ROOT / "Data/processed/urqmd_observable_features_no_protons.npz"
 RESULTS_DIR = PROJECT_ROOT / "results/boosted_tree"
 GLAUBER_DIR = PROJECT_ROOT / "Glauber/glauber_output"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -90,8 +91,6 @@ cells.append(
     "n_pi_minus",
     "n_k_plus",
     "n_k_minus",
-    "n_proton",
-    "n_antiproton",
     "sum_pt",
     "mean_pt",
     "std_pt",
@@ -103,7 +102,7 @@ cells.append(
 
 # Absolute PDG IDs of charged species expected in the UrQMD final state.
 CHARGED_ABS_PDG = (
-    11, 13, 211, 321, 2212, 3112, 3222, 3312, 3334,
+    11, 13, 211, 321, 3112, 3222, 3312, 3334,
     1114, 2114, 2214, 2224, 3114, 3214, 3224, 3314, 3324,
     1000010020, 1000010030, 1000020030, 1000020040,
 )
@@ -142,7 +141,7 @@ def build_feature_archive(root_files, output_file):
             eta1 = track & (abs_eta < 1.0)
             eta16 = track & (abs_eta < 1.6)
             forward = track & (abs_eta >= 1.0) & (abs_eta < 1.6)
-            refmult3_mask = eta1 & (abs_pid != 2212)
+            refmult3_mask = eta1
 
             n_charged_eta1 = np.asarray(ak.to_numpy(ak.sum(eta1, axis=1)))
             n_charged_eta16 = np.asarray(ak.to_numpy(ak.sum(eta16, axis=1)))
@@ -168,8 +167,6 @@ def build_feature_archive(root_files, output_file):
                 ak.sum(eta1 & (pid == -211), axis=1),
                 ak.sum(eta1 & (pid == 321), axis=1),
                 ak.sum(eta1 & (pid == -321), axis=1),
-                ak.sum(eta1 & (pid == 2212), axis=1),
-                ak.sum(eta1 & (pid == -2212), axis=1),
                 filled_stat(accepted_pt, ak.sum),
                 filled_stat(accepted_pt, ak.mean),
                 filled_stat(accepted_pt, ak.std),
@@ -217,6 +214,8 @@ if CACHE_FILE.is_file():
         npart = data["Npart"].copy()
         impact_parameter = data["b"].copy()
         event_id = data["event_id"].copy()
+    if not np.array_equal(feature_names, FEATURE_NAMES):
+        raise ValueError("Cached feature schema is not the proton-free schema.")
     print(f"Loaded {len(X):,} cached events from {CACHE_FILE}")
 else:
     X, npart, impact_parameter, event_id = build_feature_archive(
