@@ -689,11 +689,16 @@ plt.show()
 
 np.savez_compressed(
     RESULTS_DIR / "boosted_tree_results.npz",
+    model_name="Boosted tree",
+    dataset_id="urqmd_chunk_archive_observable_trigger",
     feature_names=feature_names,
     test_event_id=event_id_selected[test_idx],
     true_Npart=test_npart,
     true_b=test_b,
     refmult3=test_refmult3,
+    centrality_signal=test_refmult3,
+    pred_Npart=npart_tree_pred,
+    pred_b=b_tree_pred,
     boosted_tree_Npart=npart_tree_pred,
     boosted_tree_b=b_tree_pred,
     refmult3_glauber_Npart=npart_refmult3_pred,
