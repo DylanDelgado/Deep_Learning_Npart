@@ -3,7 +3,7 @@ import numpy as np
 import pathlib as path
 import sys
 
-n_events = 2000
+n_events = 6250
 cross_section_mb = 42.0
 b_max = 18.0
 worker_id = int(sys.argv[1])
