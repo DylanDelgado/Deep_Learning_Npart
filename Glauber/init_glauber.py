@@ -31,3 +31,4 @@ combined_file = nc.generate_events(
 worker_file = output_dir.parent / f"worker_{worker_id:02d}.npz"
 combined_file.replace(worker_file)
 output_dir.rmdir()
+
